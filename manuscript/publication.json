@@ -1,0 +1,22 @@
+{
+  "publisher": "PROXIMUS Research Labs Foundation",
+  "protocol": "Proximus",
+  "repository": "https://github.com/PROXIMUS-RESEARCH-LABS-FOUNDATION/proof-of-cipher-paper",
+  "website": "https://www.proximus.sh/paper/proof-of-cipher",
+  "contact": "hello@proximus.sh",
+  "license": "PROXIMUS Research Labs Foundation License (CRL-1.0)",
+  "copyright": "Copyright © 2025-2026 PROXIMUS Research Labs Foundation. All rights reserved.",
+  "originalEdition": "The original v1.0 edition was published on 15 October 2025 by Proximus Labs PTE LTD, with Julian Kors listed as auditor. The current edition is published by PROXIMUS Research Labs Foundation.",
+  "licenseParagraphs": [
+    "This document (the “Work”) may be read, cited, and shared for non-commercial, academic, or review purposes, provided it remains unaltered and properly attributed to PROXIMUS Research Labs Foundation.",
+    "You may not modify, republish, or use the Work or its contents, including text, diagrams, or algorithms, for commercial, derivative, or competing purposes without prior written consent from PROXIMUS Research Labs Foundation, except for the limited contribution permission below.",
+    "The Work is provided “as is,” without warranty of any kind.",
+    "For licensing inquiries or permissions, contact hello@proximus.sh."
+  ],
+  "contributionPermission": "You may fork the official repository and prepare modified copies solely to propose corrections or contributions through its pull-request process. Identify these copies as unofficial proposals and retain this license and attribution. This permission does not authorize commercial use, competing publications, or distribution of modified editions outside that review process. Only maintainers may accept changes into an official edition.",
+  "disclaimerParagraphs": [
+    "This document is a technical draft shared strictly for review and feedback. It is not and must not be construed as an offer to sell, or a solicitation to buy, any token, security, or other financial instrument. All forward-looking statements, including functionality, timelines, audits, token unlocks, or governance plans, reflect PROXIMUS Research Labs Foundation’s current intentions as of the publication date and are subject to change based on technological, market, regulatory, and operational factors beyond our control. Readers remain wholly responsible for their own due diligence, professional advice, and compliance with any laws or restrictions that may apply in their jurisdictions.",
+    "All architectural descriptions, cryptographic choices, performance targets, and prototype references are provided “as is,” without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, or non-infringement. PROXIMUS Research Labs Foundation and its contributors shall not be liable for any direct or consequential loss arising from the use or interpretation of this material.",
+    "Redistribution of unaltered copies for non-commercial review is permitted provided this notice and the license remain intact."
+  ]
+}

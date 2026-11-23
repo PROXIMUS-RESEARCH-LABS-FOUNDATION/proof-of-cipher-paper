@@ -1,0 +1,2190 @@
+{
+  "title": "Proof of Cipher",
+  "subtitle": "Mapping the Invisible Internet Layer",
+  "description": "Evidence provenance, public intelligence, Merkle transparency, and Solana commitments",
+  "version": "2.0",
+  "date": "23 November 2026",
+  "sourceSha256": "e5d4a4182e67c7d36419d17f4e467d82a7dae806ce03cb6618eaaf6eec37ee9f",
+  "sections": [
+    {
+      "id": "abstract",
+      "title": "Abstract",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Proof of Cipher (PoC) establishes a cryptographically verifiable framework for preserving security observations across the internet. Developed within the Proximus ecosystem, it connects resource assessments produced by Proxy Xray and related analysis services to a public intelligence index whose records can be checked against commitments anchored to Solana. The protocol addresses a recurring limitation of security intelligence: findings may be distributed widely while the observations supporting them remain difficult to inspect or authenticate."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PoC represents each published assessment as a canonical record with a deterministic resource identity and a commitment to supporting evidence. Records are assembled into an append-only Merkle transparency structure. A compact checkpoint is anchored on Solana so that a verifier can reconstruct the commitment for a particular assessment without requiring every scan artifact to reside on-chain. The public database makes the assessments searchable, while the cryptographic proof separates record integrity from trust in the database operator."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The design explicitly distinguishes a verifiable publication from a true security conclusion. A valid inclusion proof demonstrates that a particular record was committed, not that the original scanner was correct. Consequently, the architecture retains provenance, assessment policy, historical revisions, and evidence availability as distinct properties. It also separates the time an observation was claimed to occur from the time its commitment was finalized on-chain."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This paper formalizes the record model, canonical encoding, resource identity, evidence storage, transparency-log construction, signature policies, Solana anchoring, database layout, query interfaces, and the relationship of PoC to Proximus products. It derives proof sizes and operating costs under stated assumptions and identifies the security conditions required for independently verifiable public intelligence."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "definitions-and-abbreviations",
+      "title": "Definitions and abbreviations",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "definitions",
+          "items": [
+            {
+              "term": "Proof of Cipher (PoC)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A protocol for publishing security assessments with cryptographically verifiable provenance and integrity."
+                }
+              ]
+            },
+            {
+              "term": "Proof of Cipher Record (PoCR)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "The canonical assessment object committed to the transparency log."
+                }
+              ]
+            },
+            {
+              "term": "Proof of History (PoH)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "Solana's verifiable sequencing mechanism. It does not prove when an external observation took place."
+                }
+              ]
+            },
+            {
+              "term": "Proof of Stake (PoS)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "The stake-based consensus component of Solana."
+                }
+              ]
+            },
+            {
+              "term": "Program Derived Address (PDA)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A deterministic Solana program-controlled address derived from bounded seeds and a program identifier."
+                }
+              ]
+            },
+            {
+              "term": "Resource Identifier (RID)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A versioned digest of a canonical resource identity and namespace."
+                }
+              ]
+            },
+            {
+              "term": "Merkle root",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A digest committing to an ordered collection of leaves in a Merkle tree."
+                }
+              ]
+            },
+            {
+              "term": "Inclusion proof",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "The authentication path and metadata required to establish membership of a leaf in a committed tree."
+                }
+              ]
+            },
+            {
+              "term": "Consistency proof",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "Evidence that a newer append-only tree extends an earlier tree without rewriting its prefix."
+                }
+              ]
+            },
+            {
+              "term": "Attestor",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A signer making a precisely scoped statement about evidence, assessment, or publication."
+                }
+              ]
+            },
+            {
+              "term": "SHA-256",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A 256-bit cryptographic hash function."
+                }
+              ]
+            },
+            {
+              "term": "Ed25519",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A digital-signature scheme producing 64-byte signatures."
+                }
+              ]
+            },
+            {
+              "term": "Global Security Graph (GSG)",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A temporal graph of observed security-relevant relationships among resources."
+                }
+              ]
+            },
+            {
+              "term": "API / SDK",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "Application programming interface / software development kit."
+                }
+              ]
+            },
+            {
+              "term": "Canonical encoding",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A fully specified serialization yielding identical bytes for identical protocol objects."
+                }
+              ]
+            },
+            {
+              "term": "Evidence manifest",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "A committed description of artifacts and the rules governing their retrieval."
+                }
+              ]
+            },
+            {
+              "term": "Finality",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "The blockchain commitment level at which the protocol accepts an anchor as finalized."
+                }
+              ]
+            },
+            {
+              "term": "PROXP",
+              "description": [
+                {
+                  "kind": "text",
+                  "value": "The stated Proximus contribution-reward unit. Its accounting is separate from assessment validity."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "introduction",
+      "title": "Introduction",
+      "number": "01",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The security of an internet resource depends on systems beyond its immediate operator. External scripts execute inside otherwise legitimate websites, software depends on transitive packages, and applications interact with services whose behavior can change after deployment. Security engines observe portions of these interactions, yet their conclusions frequently remain confined to the service that produced them. An external consumer may receive a malicious classification without a durable means of establishing what was observed or whether the underlying record has changed."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PoC connects observations to persistent cryptographic records. Proxy Xray and other Proximus analysis components produce assessments that are assigned stable resource identities and evidence commitments. Their canonical encodings are incorporated into Merkle commitments and anchored to Solana. The public index supports discovery. Independent verification reconstructs the commitment without assuming the index itself is trustworthy."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The objective is not to assign permanent truth to a domain or contract. Assessments have scope and age, and a later scan may contradict an earlier result. Preserving both findings allows consumers to distinguish current judgments from historical observations. The same mechanism supports an evidence-linked Global Security Graph while avoiding the unsupported inference that shared infrastructure alone establishes malicious intent."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "protocol-architecture-and-operation",
+      "title": "Protocol architecture and operation",
+      "number": "02",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The operational pipeline begins when an authorized scanner produces an observation. A policy engine evaluates the observation and emits an assessment, whose evidence manifest is stored off-chain. The assessment is canonically encoded and appended to a transparency log. The log generates Merkle checkpoints that are signed under an explicit policy and anchored on Solana. Once finalized, the corresponding proof bundle is retrievable through the public index."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A consumer queries the public API for the resource history, obtains the canonical record and inclusion proof, reconstructs the checkpoint root, validates authorized signatures and verifies the finalized on-chain anchor. Each verification stage returns its own result. This distinction matters because an inclusion proof can be valid while an evidence artifact is unavailable or an assessment is stale."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The security decision path remains independent of the anchoring path. A pre-action risk response cannot wait for blockchain finality. Instead, it may reference an already finalized assessment or produce a new provisional observation that is committed asynchronously. The database therefore exposes publication states such as pending, committed and finalized rather than treating every API response as an already anchored proof."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mathematical-and-cryptographic-model",
+      "title": "Mathematical and cryptographic model",
+      "number": "03",
+      "blocks": [
+        {
+          "kind": "subsection",
+          "title": "Record tuple and field widths",
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "A compact PoCR core is defined by the tuple"
+                }
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "\\boxed{\\mathrm{PoCR}=(v,R,E,D,C,t,H_e,P,N)}",
+              "label": "Canonical record tuple",
+              "explanation": "The proposed record binds schema version, resource, event, classification, confidence, observation time, evidence, provenance and nonce."
+            },
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "where "
+                },
+                {
+                  "kind": "math",
+                  "value": "v"
+                },
+                {
+                  "kind": "text",
+                  "value": " is the schema version, "
+                },
+                {
+                  "kind": "math",
+                  "value": "R"
+                },
+                {
+                  "kind": "text",
+                  "value": " the resource identifier, "
+                },
+                {
+                  "kind": "math",
+                  "value": "E"
+                },
+                {
+                  "kind": "text",
+                  "value": " the event type, "
+                },
+                {
+                  "kind": "math",
+                  "value": "D"
+                },
+                {
+                  "kind": "text",
+                  "value": " the classification, "
+                },
+                {
+                  "kind": "math",
+                  "value": "C"
+                },
+                {
+                  "kind": "text",
+                  "value": " the confidence representation, "
+                },
+                {
+                  "kind": "math",
+                  "value": "t"
+                },
+                {
+                  "kind": "text",
+                  "value": " the claimed observation time, "
+                },
+                {
+                  "kind": "math",
+                  "value": "H_e"
+                },
+                {
+                  "kind": "text",
+                  "value": " the evidence-manifest commitment, "
+                },
+                {
+                  "kind": "math",
+                  "value": "P"
+                },
+                {
+                  "kind": "text",
+                  "value": " the policy/provenance commitment and "
+                },
+                {
+                  "kind": "math",
+                  "value": "N"
+                },
+                {
+                  "kind": "text",
+                  "value": " a nonce. The following layout is a "
+                },
+                {
+                  "kind": "strong",
+                  "value": "proposed v2 fixed core"
+                },
+                {
+                  "kind": "text",
+                  "value": ", not a claim about the current production serialization."
+                }
+              ]
+            },
+            {
+              "kind": "table",
+              "caption": "Proposed v2 fixed core",
+              "headers": [
+                "Symbol",
+                "Representation",
+                "Bytes"
+              ],
+              "rows": [
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "v"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "unsigned 8-bit"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "1"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "R"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "SHA-256 digest"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "32"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "E"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "unsigned 8-bit"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "1"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "D"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "unsigned 8-bit"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "1"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "C"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "unsigned 16-bit, basis points"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "2"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "t"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "unsigned 64-bit Unix milliseconds"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "8"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "H_e"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "SHA-256 digest"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "32"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "P"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "SHA-256 digest"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "32"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "math",
+                      "value": "N"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "128-bit nonce"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "16"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "kind": "text",
+                      "value": "Total"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "fixed core, excluding envelope"
+                    }
+                  ],
+                  [
+                    {
+                      "kind": "text",
+                      "value": "125"
+                    }
+                  ]
+                ]
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "S_{\\mathrm{core}}=1+32+1+1+2+8+32+32+16=125\\ \\mathrm{bytes}.",
+              "label": "Fixed core size",
+              "explanation": "The proposed fixed fields total 125 bytes. Signatures, envelopes and proofs are separate."
+            },
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "The byte order, domain identifiers, enum values, nonce policy and treatment of absent fields must be frozen in a normative schema. A byte count does not establish interoperability without these rules. The canonical record bytes are"
+                }
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "B_i=\\operatorname{Encode}_v(\\mathrm{PoCR}_i).",
+              "label": "Canonical record bytes",
+              "explanation": "The versioned encoder must produce exactly the same bytes for identical protocol objects."
+            }
+          ]
+        },
+        {
+          "kind": "subsection",
+          "title": "Hash commitments",
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "With explicit domain separation, the Merkle leaf and internal node are"
+                }
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "\\begin{aligned}L_i&=\\operatorname{SHA256}(\\mathtt{0x00}\\parallel B_i),\\\\N_{a,b}&=\\operatorname{SHA256}(\\mathtt{0x01}\\parallel a\\parallel b).\\end{aligned}",
+              "label": "Merkle domain separation",
+              "explanation": "A leaf begins with 0x00 and an internal node begins with 0x01. The prefixes distinguish records from pairs of child hashes."
+            },
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "The tree uses the ordered, unbalanced construction of RFC 9162 rather than silently duplicating the last leaf. A leaf's position and the committed tree size are part of the verification context. For "
+                },
+                {
+                  "kind": "math",
+                  "value": "n=2^k"
+                },
+                {
+                  "kind": "text",
+                  "value": " leaves, the authentication path has "
+                },
+                {
+                  "kind": "math",
+                  "value": "k"
+                },
+                {
+                  "kind": "text",
+                  "value": " sibling hashes:"
+                }
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "S_{\\mathrm{path}}=32\\log_2 n\\ \\mathrm{bytes}.",
+              "label": "Authentication path size",
+              "explanation": "For a power-of-two tree, each level contributes one 32-byte sibling hash. This measures the path alone."
+            },
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "At "
+                },
+                {
+                  "kind": "math",
+                  "value": "n=4096"
+                },
+                {
+                  "kind": "text",
+                  "value": ", the path is "
+                },
+                {
+                  "kind": "math",
+                  "value": "12\\times32=384"
+                },
+                {
+                  "kind": "text",
+                  "value": " bytes. This excludes the record, tree size, leaf index, signatures, checkpoint and blockchain reference. For non-power-of-two trees, proof lengths depend on the leaf position and the specified tree algorithm."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "subsection",
+          "title": "Verification statement",
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "A verifier accepts inclusion only if the canonical leaf and ordered authentication path reconstruct the authenticated checkpoint root:"
+                }
+              ]
+            },
+            {
+              "kind": "equation",
+              "latex": "\\operatorname{Verify}_{\\mathrm{incl}}(B_i,\\pi_i,i,n,r)=1.",
+              "label": "Inclusion verification",
+              "explanation": "The record bytes, proof, leaf index and tree size must reconstruct the authenticated root. Inclusion does not prove the assessment is correct."
+            },
+            {
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "value": "Under the collision-resistance assumptions of SHA-256, this establishes membership of the encoded record in the committed collection. It does not establish the factual accuracy of a scanner's finding."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resource-identity-and-canonicalization",
+      "title": "Resource identity and canonicalization",
+      "number": "04",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A resource must be identified within an explicit namespace. The identity function takes a canonical type and value and commits to their unambiguous encoding:"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "R=\\operatorname{SHA256}(\\mathtt{PoC-RID-v2}\\parallel\\operatorname{Encode}(type,scope,canonical(value))).",
+          "label": "Scoped resource identity",
+          "explanation": "The digest binds a versioned domain separator to the encoded resource type, scope and canonical value."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The encoding must be length-delimited or otherwise prefix-free. Resource scopes prevent a Solana address from being confused with an EVM contract or an identically spelled hostname. Solana resources include the cluster or genesis identity, EVM resources include the chain identifier. Package artifacts should use immutable digests when available rather than relying on a mutable tag."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "URL canonicalization is deliberately conservative. Lowercasing a hostname may be appropriate, but changing the path, decoding reserved characters or sorting query parameters can alter application semantics. A resource-level assessment is not automatically transferable to its parent domain. The canonicalization profile is versioned so that future changes cannot silently reinterpret historical hashes."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A public SHA-256 identifier does not conceal a guessable hostname. Restricted resources require scoped or keyed identifiers and separate disclosure policies. This is particularly important for enterprise infrastructure and unreleased security findings."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-manifests-and-storage-integrity",
+      "title": "Evidence manifests and storage integrity",
+      "number": "05",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "An evidence manifest is a canonical description of the artifacts supporting an assessment. Each artifact is identified by a digest over its exact bytes:"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "h_j=\\operatorname{SHA256}(F_j),\\qquad H_e=\\operatorname{SHA256}(\\operatorname{Encode}(M(h_1,\\ldots,h_m))).",
+          "label": "Evidence commitments",
+          "explanation": "Each artifact is hashed over its exact bytes. The manifest commits to the collection of artifact hashes and retrieval metadata."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The manifest includes the declared media type, byte length, collection context, availability policy and any redaction transform. Evidence is stored off-chain in content-addressed or immutable object storage. Its location can change without changing the commitment, provided the bytes remain identical."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A public commitment and a publicly accessible artifact are not the same property. Sensitive exploit details or private infrastructure traces may be retained under access control while only their commitments are published. The index must report when an artifact is restricted, unavailable or expired rather than imply that a matching hash guarantees retrievability. Public disclosure requires a separate policy decision before any canonical resource identifier or artifact becomes searchable."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For "
+            },
+            {
+              "kind": "math",
+              "value": "N"
+            },
+            {
+              "kind": "text",
+              "value": " artifacts of average size "
+            },
+            {
+              "kind": "math",
+              "value": "s"
+            },
+            {
+              "kind": "text",
+              "value": ", the raw storage lower bound is "
+            },
+            {
+              "kind": "math",
+              "value": "Ns"
+            },
+            {
+              "kind": "text",
+              "value": ". At "
+            },
+            {
+              "kind": "math",
+              "value": "N=10^7"
+            },
+            {
+              "kind": "text",
+              "value": " and "
+            },
+            {
+              "kind": "math",
+              "value": "s=20\\,\\mathrm{KiB}"
+            },
+            {
+              "kind": "text",
+              "value": ", this is "
+            },
+            {
+              "kind": "math",
+              "value": "204.8"
+            },
+            {
+              "kind": "text",
+              "value": " decimal GB per day before deduplication, indexes, replicas or backups. Evidence economics therefore dominate the size of the 32-byte on-chain roots in high-volume deployments."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "assessment-semantics-and-confidence",
+      "title": "Assessment semantics and confidence",
+      "number": "06",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Classification is separated from enforcement. The assessment label may be "
+            },
+            {
+              "kind": "math",
+              "value": "D\\in\\{\\mathrm{SAFE},\\mathrm{MALICIOUS},\\mathrm{UNKNOWN}\\}"
+            },
+            {
+              "kind": "text",
+              "value": ", while an application action may be "
+            },
+            {
+              "kind": "math",
+              "value": "A\\in\\{\\mathrm{ALLOW},\\mathrm{WARN},\\mathrm{BLOCK}\\}"
+            },
+            {
+              "kind": "text",
+              "value": ". A block action is not evidence that a resource is malicious. It may result from a local policy or insufficient information. Likewise, the absence of a malicious finding is not proof of safety."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "If a model produces a calibrated malicious probability "
+            },
+            {
+              "kind": "math",
+              "value": "p"
+            },
+            {
+              "kind": "text",
+              "value": ", a policy may use two thresholds:"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "D(p)=\\begin{cases}\\mathrm{SAFE},&p\\leq\\tau_s,\\\\\\mathrm{MALICIOUS},&p\\geq\\tau_m,\\\\\\mathrm{UNKNOWN},&\\tau_s<p<\\tau_m.\\end{cases}",
+          "label": "Classification thresholds",
+          "explanation": "A calibrated probability below the safe threshold or above the malicious threshold selects that class. The interval between them remains unknown."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The thresholds are policy parameters, not universal constants. The reported confidence should be evaluated against labeled observations through precision, recall and calibration metrics. For binary outcomes "
+            },
+            {
+              "kind": "math",
+              "value": "y_i\\in\\{0,1\\}"
+            },
+            {
+              "kind": "text",
+              "value": ", the Brier score is"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "\\mathrm{BS}=\\frac{1}{N}\\sum_{i=1}^{N}(p_i-y_i)^2.",
+          "label": "Brier score",
+          "explanation": "The mean squared difference between predicted probabilities and binary outcomes measures probabilistic prediction error."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A public record should preserve the model or ruleset version and the scan scope so that a later consumer can understand what a classification did and did not establish."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transparency-log-and-historical-consistency",
+      "title": "Transparency log and historical consistency",
+      "number": "07",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PoC maintains an ordered append-only log of assessment commitments. A checkpoint consists of a log identity, tree size, root, sequence and attestation-policy reference. The log supplies inclusion proofs for individual records and consistency proofs demonstrating that a later tree extends an earlier tree. The construction follows the transparency-log principles of RFC 9162, while its PoC-specific encoding remains explicitly versioned."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "An immutable commitment to a batch is insufficient if earlier roots are overwritten without a reliable historical anchor. The protocol therefore preserves authenticated checkpoints and their relationships. Independent monitors compare signed checkpoints and verify consistency. Otherwise a malicious operator could present incompatible views to different clients. Solana anchoring makes finalized checkpoint values externally observable, but monitoring is still needed to detect withholding or inconsistent publication."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Let "
+            },
+            {
+              "kind": "math",
+              "value": "r_n"
+            },
+            {
+              "kind": "text",
+              "value": " be the root at size "
+            },
+            {
+              "kind": "math",
+              "value": "n"
+            },
+            {
+              "kind": "text",
+              "value": " and "
+            },
+            {
+              "kind": "math",
+              "value": "r_m"
+            },
+            {
+              "kind": "text",
+              "value": " a later root at "
+            },
+            {
+              "kind": "math",
+              "value": "m\\ge n"
+            },
+            {
+              "kind": "text",
+              "value": ". A consistency verifier evaluates"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "\\operatorname{Verify}_{\\mathrm{cons}}(n,m,r_n,r_m,\\pi_{n\\rightarrow m})=1.",
+          "label": "Historical consistency",
+          "explanation": "A consistency proof must show that the later tree extends the earlier tree without rewriting its prefix."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The exact proof construction is defined by the selected Merkle tree standard. A current-state database view may change as assessments are superseded. The append-only history must not."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "attestation-and-signer-policy",
+      "title": "Attestation and signer policy",
+      "number": "08",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "An attestation is a signature over a precisely defined statement, not a generic claim of truth. Publication witnesses may attest to checkpoint integrity while independent scanners attest to a separate observation. These roles must not be conflated. The signed message includes a domain identifier, protocol version, network identity, program identity, policy version and checkpoint digest:"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "m=\\operatorname{SHA256}(\\operatorname{Encode}(domain,v,network,program,policy,checkpoint)).",
+          "label": "Attestation message",
+          "explanation": "A signature is bound to the domain, protocol version, network, program, policy and checkpoint through this digest."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For an Ed25519 key pair "
+            },
+            {
+              "kind": "math",
+              "value": "(sk_j,pk_j)"
+            },
+            {
+              "kind": "text",
+              "value": ", the signature is "
+            },
+            {
+              "kind": "math",
+              "value": "\\sigma_j=\\mathrm{Sign}_{sk_j}(m)"
+            },
+            {
+              "kind": "text",
+              "value": ". A weighted policy accepts a unique authorized signer set "
+            },
+            {
+              "kind": "math",
+              "value": "V"
+            },
+            {
+              "kind": "text",
+              "value": " if"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "\\sum_{j\\in V}w_j\\ge\\tau,\\qquad\\forall j\\in V:\\mathrm{Verify}_{pk_j}(m,\\sigma_j)=1.",
+          "label": "Authorized signer weight",
+          "explanation": "Only unique authorized signers count toward the threshold, and every counted signature must verify against the same message."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Key rotation and revocation must be recorded in the applicable policy history. The signer set is deduplicated by public key, and authorization is evaluated against the policy version bound into the checkpoint. Three signatures over the same scanner output do not represent three independent observations unless the signed statements explicitly document independent measurement."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "temporal-integrity-and-solana-finality",
+      "title": "Temporal integrity and Solana finality",
+      "number": "09",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The protocol distinguishes the claimed observation time "
+            },
+            {
+              "kind": "math",
+              "value": "t_o"
+            },
+            {
+              "kind": "text",
+              "value": ", the attestation time "
+            },
+            {
+              "kind": "math",
+              "value": "t_a"
+            },
+            {
+              "kind": "text",
+              "value": " and the finalized anchoring time "
+            },
+            {
+              "kind": "math",
+              "value": "t_f"
+            },
+            {
+              "kind": "text",
+              "value": ". Their expected order is "
+            },
+            {
+              "kind": "math",
+              "value": "t_o\\le t_a\\le t_f"
+            },
+            {
+              "kind": "text",
+              "value": ", subject to clock skew and delayed processing. A finalized blockchain anchor demonstrates that the committed bytes existed no later than their inclusion in the finalized chain. It does not independently establish when an off-chain scan was performed."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PoH contributes to Solana's verifiable sequencing and must not be described as an external timestamp oracle. A client-provided slot cannot prove the observation time. The proof bundle therefore identifies the finalized transaction and slot separately from scanner-provided timestamps. Pending commitments remain distinguishable from finalized commitments in the public API."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A freshness factor may support rescan prioritization:"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "F(\\Delta t)=e^{-\\lambda\\Delta t},\\qquad\\lambda=\\frac{\\ln 2}{T_{1/2}}.",
+          "label": "Observation freshness",
+          "explanation": "The exponential factor halves after the selected half-life. It expresses age, not a change from malicious to safe."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "At a 30-day half-life, "
+            },
+            {
+              "kind": "math",
+              "value": "F(30)=0.5"
+            },
+            {
+              "kind": "text",
+              "value": " and "
+            },
+            {
+              "kind": "math",
+              "value": "F(60)=0.25"
+            },
+            {
+              "kind": "text",
+              "value": ". This decay must not automatically turn a malicious historical finding into a safe finding. Expired observations should instead be treated as stale or inconclusive under the applicable policy."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "solana-anchoring-and-program-account-design",
+      "title": "Solana anchoring and program account design",
+      "number": "10",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Solana is the public commitment layer, not the primary evidence database. A compact registry can publish versioned checkpoint roots and their continuity references. One PDA per observed resource is not required for global batch anchoring. Per-resource state may be retained only where a distinct application needs it. This removes the inconsistency in the 2025 paper, which combined resource-level accounts with a batch-level amortization formula."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A proposed immutable checkpoint payload is 124 bytes: discriminator (8), version (2), sequence (8), tree size (8), root (32), previous checkpoint digest (32), policy digest (32), and flags (2). This is an illustrative schema. Actual deployed account layouts must be derived from the program IDL and verified on-chain. PDA seeds must obey Solana's 32-byte per-seed limit. For example, the seed tuple may be "
+            },
+            {
+              "kind": "math",
+              "value": "(\\mathtt{poc-checkpoint},\\mathrm{LE64}(sequence))"
+            },
+            {
+              "kind": "text",
+              "value": " rather than an invalid concatenated seed exceeding the limit."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Signature verification must follow Solana's supported Ed25519 precompile and instruction-introspection rules rather than assuming that a program can invoke a general Ed25519 verification syscall through CPI. A secure implementation checks the verified message bytes, signer keys, policy and instruction references. Checkpoint publication must also prevent replay, unauthorized publishers and conflicting sequence numbers."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "public-database-and-reproducible-indexing",
+      "title": "Public database and reproducible indexing",
+      "number": "11",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The public database is an index over cryptographically committed records. A relational source of truth can maintain resources, observations, assessments, evidence manifests, checkpoints, attestations and graph edges. Search indexes and materialized current-state views accelerate queries but remain derivable from the canonical log. The database must not become the only authority for proof integrity."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A minimal relational decomposition is"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "\\begin{aligned}\\mathrm{Resource}&(rid,type,canonical,version),\\\\\\mathrm{Assessment}&(id,rid,classification,policy,evidence,observed),\\\\\\mathrm{Checkpoint}&(seq,size,root,anchor,finality),\\\\\\mathrm{Inclusion}&(assessment\\_id,log\\_index,checkpoint\\_seq),\\\\\\mathrm{Artifact}&(hash,length,visibility,availability),\\\\\\mathrm{Edge}&(src,dst,type,observed,provenance).\\end{aligned}",
+          "label": "Relational decomposition",
+          "explanation": "These relations separate resource identity, assessments, checkpoints, inclusion positions, artifacts and evidence-linked graph edges."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Primary keys on immutable hashes and unique log indexes prevent accidental duplicate commitment positions. Time-partitioned assessment tables can reduce maintenance costs, while a separate current-state projection avoids repeatedly scanning a complete history. The current-state projection must identify its derivation checkpoint and indexing lag so clients can distinguish freshness from finality."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For public access, searchable fields may include domains, URLs, contract addresses, package identifiers, assessment types, evidence hashes and historical time ranges. Sensitive tenant resources must not be inserted into the public index merely because a hash was produced. Publication requires a distinct disclosure decision and, where necessary, keyed or scoped identifiers."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "private-evidence-plane-and-access-boundaries",
+      "title": "Private evidence plane and access boundaries",
+      "number": "12",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Enterprise scans can expose internal topology and unpublished vulnerabilities. The private plane therefore maintains tenant-scoped authorization and restricted artifacts separately from the public discovery index. A private assessment may still receive a commitment without disclosing its canonical resource name or evidence contents. Public and private evidence use compatible verification semantics but different retrieval policies."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Access control is enforced at the service and storage boundaries. Short-lived retrieval credentials and audit records govern restricted artifacts. Redaction is treated as a transform producing a new artifact with a new digest, not as an invisible modification of the original bytes. A public sanitized artifact may be linked to a restricted original through a manifest without exposing the restricted content."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ingestion-durability-and-publication-state",
+      "title": "Ingestion, durability and publication state",
+      "number": "13",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The event pipeline must tolerate duplicate delivery, out-of-order completion and external outages. A scanner emits an observation to durable ingestion, where the service validates its schema and computes canonical commitments. The publication service appends accepted assessments to the transparency log and periodically anchors checkpoints. Transactional outbox patterns or equivalent mechanisms prevent a database commit from silently losing its publication event."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A delivery idempotency key can be constructed as"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "K=\\operatorname{SHA256}(\\operatorname{Encode}(scanner\\_id,job\\_id,observation\\_seq)).",
+          "label": "Delivery idempotency",
+          "explanation": "Scanner, job and observation sequence identify one delivery. Retries can be deduplicated without merging independent rescans."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This identifies retries of the same observation without collapsing independent rescans of the same resource. During Solana congestion, security decisions continue off-chain and checkpoints remain pending. A later anchor references the same immutable checkpoint bytes. The API reports whether a record is observed, committed, submitted or finalized, and it does not describe pending work as already blockchain-verified."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "global-security-graph",
+      "title": "Global Security Graph",
+      "number": "14",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The GSG is a temporal heterogeneous graph "
+            },
+            {
+              "kind": "math",
+              "value": "G_t=(V,E_t)"
+            },
+            {
+              "kind": "text",
+              "value": " whose nodes represent resources and evidence-linked entities. An edge records the observed relationship, its source and its validity interval. The graph distinguishes direct evidence of malicious behavior from weak associations such as shared hosting. A shared CDN or IP address is not sufficient to classify every co-hosted site as malicious."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For an edge "
+            },
+            {
+              "kind": "math",
+              "value": "e_{ij}"
+            },
+            {
+              "kind": "text",
+              "value": ", a generic confidence weighting can be represented as"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "w_{ij}=q_{ij}\\,r_{ij}\\,f_{ij}(\\Delta t),",
+          "label": "Graph relationship weight",
+          "explanation": "Evidence quality, source reliability and temporal relevance contribute to an edge weight. These parameters require empirical validation."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "where "
+            },
+            {
+              "kind": "math",
+              "value": "q"
+            },
+            {
+              "kind": "text",
+              "value": " represents evidentiary quality, "
+            },
+            {
+              "kind": "math",
+              "value": "r"
+            },
+            {
+              "kind": "text",
+              "value": " source reliability and "
+            },
+            {
+              "kind": "math",
+              "value": "f"
+            },
+            {
+              "kind": "text",
+              "value": " temporal relevance. These factors are model parameters to be validated empirically, not cryptographic guarantees. Graph propagation may help prioritize investigation but should not replace direct evidence for high-impact public classifications."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A graph engine may be useful for complex traversals, but PostgreSQL edge tables and analytical indexes can be sufficient for initial workloads. The storage engine should be selected on measured query complexity rather than assumed from the graph abstraction."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "public-apis-and-independent-verification",
+      "title": "Public APIs and independent verification",
+      "number": "15",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The public API provides discovery. The verification SDK supplies the independent trust boundary. Representative interfaces include resource history, assessment retrieval, evidence manifests, checkpoint retrieval, inclusion proofs, consistency proofs and event streaming. An API response should expose assessment status and proof status separately."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "An independent verifier performs the following logical checks: canonical encoding, leaf reconstruction, Merkle inclusion, checkpoint authentication, signer policy, finalized Solana anchor, checkpoint consistency and evidence digest matching where artifacts are available. The result is a structured verification report rather than a single Boolean. A valid Merkle proof with missing evidence should report valid inclusion and unavailable evidence, not an unqualified verified security conclusion."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Third-party applications may use these interfaces to build browser warnings, wallet risk checks, CI/CD gates, SIEM enrichments, vulnerability research portals and autonomous-agent policy controls. Retrieved evidence is untrusted content and must not be interpreted as instructions to an agent or privileged execution environment."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proximus-product-supply-chain",
+      "title": "Proximus product supply chain",
+      "number": "16",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Proxy Xray produces observations about websites, infrastructure and applications. The Proximus analysis engines turn those observations into assessments under versioned detection policies. The PoC publication service commits eligible assessments to the transparency log and exposes their proofs through the public intelligence interface. The Proxy Dashboard supports scan review, evidence access, disclosure decisions and remediation history. The security API can consume current intelligence for low-latency application decisions."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Blockchain RPC providers supply external chain observations and anchoring transport, but an RPC response is not itself a PoC proof. Scanner provenance should identify chain context and relevant data sources when necessary to reproduce a finding. A consumer of the public API may use PoC records without adopting the Proximus scanning product, while the cryptographic verifier remains capable of rejecting inconsistent index responses."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PROXP contribution accounting is conceptually downstream of evidence validation. A contribution reward must not determine the SAFE or MALICIOUS classification. The protocol can commit contribution attestations separately from security assessments so that incentive disputes do not alter the historical security record."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-bandwidth-and-fee-calculations",
+      "title": "Storage, bandwidth and fee calculations",
+      "number": "17",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For "
+            },
+            {
+              "kind": "math",
+              "value": "N"
+            },
+            {
+              "kind": "text",
+              "value": " assessments in batches of capacity "
+            },
+            {
+              "kind": "math",
+              "value": "B"
+            },
+            {
+              "kind": "text",
+              "value": ", the ideal number of anchoring transactions is"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "T=\\left\\lceil\\frac{N}{B}\\right\\rceil.",
+          "label": "Ideal batch count",
+          "explanation": "Divide the assessment count by batch capacity and round upward to include a partially filled batch."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "At "
+            },
+            {
+              "kind": "math",
+              "value": "N=10^7"
+            },
+            {
+              "kind": "text",
+              "value": " per day and "
+            },
+            {
+              "kind": "math",
+              "value": "B=4096"
+            },
+            {
+              "kind": "text",
+              "value": ", "
+            },
+            {
+              "kind": "math",
+              "value": "T=2442"
+            },
+            {
+              "kind": "text",
+              "value": " transactions per day. At a hypothetical base fee of 5000 lamports for one charged signature and no priority fee, the transaction-fee-only component is"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "\\begin{aligned}C_{\\mathrm{base}}&=2442\\times5000=12{,}210{,}000\\ \\mathrm{lamports},\\\\&=0.01221\\ \\mathrm{SOL/day}.\\end{aligned}",
+          "label": "Illustrative base transaction fees",
+          "explanation": "This example multiplies 2,442 transactions by 5,000 lamports. It excludes priority fees, extra signatures, retries and account funding."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This is "
+            },
+            {
+              "kind": "strong",
+              "value": "not"
+            },
+            {
+              "kind": "text",
+              "value": " a measured production fee: additional signatures, precompile charges, priority fees, retries and account creation must be included. Solana rent-exempt balance is a locked account funding requirement rather than a recurring annual fee, so the 2025 paper's rent-per-year comparison must not be reused as an operating-cost estimate."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For a serialized record average of "
+            },
+            {
+              "kind": "math",
+              "value": "s=512"
+            },
+            {
+              "kind": "text",
+              "value": " bytes, "
+            },
+            {
+              "kind": "math",
+              "value": "10^7"
+            },
+            {
+              "kind": "text",
+              "value": " records/day produce "
+            },
+            {
+              "kind": "math",
+              "value": "5.12"
+            },
+            {
+              "kind": "text",
+              "value": " decimal GB/day, or "
+            },
+            {
+              "kind": "math",
+              "value": "1.8688"
+            },
+            {
+              "kind": "text",
+              "value": " TB/year before indexes and replicas. If the average evidence artifact is 20 KiB and every record has one unique artifact, the raw evidence workload reaches "
+            },
+            {
+              "kind": "math",
+              "value": "204.8"
+            },
+            {
+              "kind": "text",
+              "value": " GB/day. The complete per-assessment cost is"
+            }
+          ]
+        },
+        {
+          "kind": "equation",
+          "latex": "C_a=C_{scan}+C_{inference}+C_{evidence}+C_{index}+C_{proof}+C_{network}+C_{ops}.",
+          "label": "Complete assessment cost",
+          "explanation": "Total cost includes scanning, inference, evidence, indexing, proofs, networking and operations."
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Batch size trades publication latency against fee amortization. For a stable arrival rate "
+            },
+            {
+              "kind": "math",
+              "value": "\\lambda"
+            },
+            {
+              "kind": "text",
+              "value": ", the time to fill a batch is approximately "
+            },
+            {
+              "kind": "math",
+              "value": "B/\\lambda"
+            },
+            {
+              "kind": "text",
+              "value": ". At "
+            },
+            {
+              "kind": "math",
+              "value": "\\lambda=10^7/86400\\approx115.74"
+            },
+            {
+              "kind": "text",
+              "value": " assessments/s, a 4096-event batch fills in about 35.4 seconds. Actual publication delay additionally includes queueing, validation and Solana finality."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "worked-cryptographic-example",
+      "title": "Worked cryptographic example",
+      "number": "18",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Consider a fictional scan of "
+            },
+            {
+              "kind": "code",
+              "value": "https://example.invalid/login"
+            },
+            {
+              "kind": "text",
+              "value": ". The resource type is URL and its canonical value is encoded under the versioned URL profile. Its RID is "
+            },
+            {
+              "kind": "math",
+              "value": "R=\\operatorname{SHA256}(\\operatorname{Encode}(\\mathtt{url},canonical\\_url))"
+            },
+            {
+              "kind": "text",
+              "value": ". The scanner stores an evidence artifact "
+            },
+            {
+              "kind": "math",
+              "value": "F"
+            },
+            {
+              "kind": "text",
+              "value": " and computes "
+            },
+            {
+              "kind": "math",
+              "value": "h=\\operatorname{SHA256}(F)"
+            },
+            {
+              "kind": "text",
+              "value": ". The evidence manifest is encoded and committed as "
+            },
+            {
+              "kind": "math",
+              "value": "H_e=\\operatorname{SHA256}(\\operatorname{Encode}(M))"
+            },
+            {
+              "kind": "text",
+              "value": ". A canonical PoCR includes the classification, observation time and policy digest. Its leaf is "
+            },
+            {
+              "kind": "math",
+              "value": "L=\\operatorname{SHA256}(\\mathtt{0x00}\\parallel\\operatorname{Encode}(\\mathrm{PoCR}))"
+            },
+            {
+              "kind": "text",
+              "value": "."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Suppose the record is one of 1024 leaves. A complete balanced binary tree yields a ten-sibling path occupying "
+            },
+            {
+              "kind": "math",
+              "value": "10\\times32=320"
+            },
+            {
+              "kind": "text",
+              "value": " bytes. The verifier receives the canonical record, index, tree size, path and authenticated checkpoint. It hashes the record and combines the siblings in the specified order to reconstruct the root. The reconstructed root must equal the finalized checkpoint root. If a later rescan produces a different classification, it is appended as a new record and the previous assessment remains verifiable."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This example intentionally omits fabricated hexadecimal test vectors. Publication-grade vectors require a frozen canonical encoder, complete input bytes, computed digest outputs and an independent implementation that reproduces them. Placeholder digests must never be represented as verified calculations."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-properties-and-limitations",
+      "title": "Security properties and limitations",
+      "number": "19",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PoC provides conditional integrity and provenance guarantees under the collision resistance of SHA-256, the security of Ed25519, correct canonical encoding and the integrity of the checkpoint verification policy. It does not provide a cryptographic proof that an off-chain classification is true. A compromised scanner can produce false but internally consistent evidence. Independent validation and accountable provenance are therefore necessary."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "A malicious log operator may attempt equivocation or withholding. Signed checkpoints, consistency proofs, independent monitors and Solana anchoring mitigate this threat, but no one mechanism substitutes for the others. Public hashes can also reveal low-entropy identifiers through guessing. Privacy depends on disclosure policy and scoped commitments, not merely on omitting plaintext from Solana."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The protocol must preserve auditability across key rotation, unavailable evidence and corrected assessments. Historical findings remain intact while current-state projections change. These distinctions are central to making a public security database useful without treating its classifications as permanent truth."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "conclusion",
+      "title": "Conclusion",
+      "number": "20",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Proof of Cipher links the production of security observations to an independently verifiable public record. Its architecture gives each assessment a stable identity and evidence commitment, preserves append-only history through Merkle transparency, and uses Solana as an external anchoring layer. The public database enables practical discovery without replacing cryptographic verification, while the private evidence plane prevents indiscriminate disclosure of sensitive customer data."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The principal contribution is the separation of three questions that security systems often collapse: what a scanner concluded, what evidence supports that conclusion, and whether the recorded statement has remained intact. Treating these as separate properties permits Proximus intelligence to be reused by external applications without making the original database the sole source of trust. The technical strength of PoC ultimately rests on reproducible encoding, accountable attestation, durable evidence and independent verification rather than on the existence of a blockchain transaction alone."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "technical-references",
+      "title": "Technical references",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "references",
+          "items": [
+            [
+              {
+                "kind": "text",
+                "value": "PROXIMUS Research Labs Foundation, "
+              },
+              {
+                "kind": "strong",
+                "value": "Proof of Cipher: Mapping the Invisible Internet Layer"
+              },
+              {
+                "kind": "text",
+                "value": ", original research whitepaper, 15 October 2025 (original manuscript)."
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "IETF RFC 9162, "
+              },
+              {
+                "kind": "strong",
+                "value": "Certificate Transparency Version 2.0"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://www.rfc-editor.org/rfc/rfc9162",
+                "href": "https://www.rfc-editor.org/rfc/rfc9162"
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "IETF RFC 8949, "
+              },
+              {
+                "kind": "strong",
+                "value": "Concise Binary Object Representation (CBOR)"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://www.rfc-editor.org/rfc/rfc8949",
+                "href": "https://www.rfc-editor.org/rfc/rfc8949"
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "IETF RFC 8785, "
+              },
+              {
+                "kind": "strong",
+                "value": "JSON Canonicalization Scheme"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://www.rfc-editor.org/rfc/rfc8785",
+                "href": "https://www.rfc-editor.org/rfc/rfc8785"
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "Solana Documentation, "
+              },
+              {
+                "kind": "strong",
+                "value": "Program Derived Addresses"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://solana.com/docs/core/pda",
+                "href": "https://solana.com/docs/core/pda"
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "Solana Documentation, "
+              },
+              {
+                "kind": "strong",
+                "value": "Precompiled Programs"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://solana.com/docs/core/programs/precompiles",
+                "href": "https://solana.com/docs/core/programs/precompiles"
+              }
+            ],
+            [
+              {
+                "kind": "text",
+                "value": "Solana Documentation, "
+              },
+              {
+                "kind": "strong",
+                "value": "Transaction Fees"
+              },
+              {
+                "kind": "text",
+                "value": ". "
+              },
+              {
+                "kind": "link",
+                "value": "https://solana.com/docs/core/fees",
+                "href": "https://solana.com/docs/core/fees"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publication-details",
+      "title": "Publication details",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Publisher: PROXIMUS Research Labs Foundation. Protocol: Proximus."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The original v1.0 edition was published on 15 October 2025 by Proximus Labs PTE LTD, with Julian Kors listed as auditor. The current edition is published by PROXIMUS Research Labs Foundation."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "license",
+      "title": "License",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "PROXIMUS Research Labs Foundation License (CRL-1.0)"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This document (the “Work”) may be read, cited, and shared for non-commercial, academic, or review purposes, provided it remains unaltered and properly attributed to PROXIMUS Research Labs Foundation."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "You may not modify, republish, or use the Work or its contents, including text, diagrams, or algorithms, for commercial, derivative, or competing purposes without prior written consent from PROXIMUS Research Labs Foundation, except for the limited contribution permission below."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "The Work is provided “as is,” without warranty of any kind."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "For licensing inquiries or permissions, contact hello@proximus.sh."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "You may fork the official repository and prepare modified copies solely to propose corrections or contributions through its pull-request process. Identify these copies as unofficial proposals and retain this license and attribution. This permission does not authorize commercial use, competing publications, or distribution of modified editions outside that review process. Only maintainers may accept changes into an official edition."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Copyright © 2025-2026 PROXIMUS Research Labs Foundation. All rights reserved."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legal-disclaimer",
+      "title": "Legal disclaimer",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "This document is a technical draft shared strictly for review and feedback. It is not and must not be construed as an offer to sell, or a solicitation to buy, any token, security, or other financial instrument. All forward-looking statements, including functionality, timelines, audits, token unlocks, or governance plans, reflect PROXIMUS Research Labs Foundation’s current intentions as of the publication date and are subject to change based on technological, market, regulatory, and operational factors beyond our control. Readers remain wholly responsible for their own due diligence, professional advice, and compliance with any laws or restrictions that may apply in their jurisdictions."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "All architectural descriptions, cryptographic choices, performance targets, and prototype references are provided “as is,” without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, or non-infringement. PROXIMUS Research Labs Foundation and its contributors shall not be liable for any direct or consequential loss arising from the use or interpretation of this material."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Redistribution of unaltered copies for non-commercial review is permitted provided this notice and the license remain intact."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Copyright © 2025-2026 PROXIMUS Research Labs Foundation. All rights reserved."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contributions",
+      "title": "Contributions",
+      "number": null,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "value": "Corrections, research discussion, and proposed changes are welcome through GitHub issues and pull requests. Maintainers review and merge accepted changes. Public access does not change the license restrictions."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "link",
+              "value": "Read the source and contribution guide on GitHub",
+              "href": "https://github.com/PROXIMUS-RESEARCH-LABS-FOUNDATION/proof-of-cipher-paper"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "link",
+              "value": "Licensing inquiries: hello@proximus.sh",
+              "href": "mailto:hello@proximus.sh"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "Please cite the paper using preferred-citation and the tagged edition you reviewed."
+type: software
+title: "Proof of Cipher: Mapping the Invisible Internet Layer"
+authors:
+  - name: "PROXIMUS Research Labs Foundation"
+version: 2.0.0
+date-released: 2026-11-23
+url: "https://www.proximus.sh/paper/proof-of-cipher"
+repository-code: "https://github.com/PROXIMUS-RESEARCH-LABS-FOUNDATION/proof-of-cipher-paper"
+license-url: "https://www.proximus.sh/paper/proof-of-cipher#license"
+preferred-citation:
+  type: report
+  title: "Proof of Cipher: Mapping the Invisible Internet Layer"
+  authors:
+    - name: "PROXIMUS Research Labs Foundation"
+  publisher:
+    name: "PROXIMUS Research Labs Foundation"
+  version: 2.0.0
+  date-released: 2026-11-23
+  url: "https://www.proximus.sh/paper/proof-of-cipher"
+  license-url: "https://www.proximus.sh/paper/proof-of-cipher#license"

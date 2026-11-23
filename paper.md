@@ -1,0 +1,569 @@
+# Proof of Cipher: Mapping the Invisible Internet Layer
+
+Version 2.0 - 23 November 2026
+
+PROXIMUS Research Labs Foundation
+
+[Read on the website](https://www.proximus.sh/paper/proof-of-cipher) - [Source and contributions](https://github.com/PROXIMUS-RESEARCH-LABS-FOUNDATION/proof-of-cipher-paper)
+
+Evidence provenance, public intelligence, Merkle transparency, and Solana commitments
+
+## Abstract
+
+Proof of Cipher (PoC) establishes a cryptographically verifiable framework for preserving security observations across the internet. Developed within the Proximus ecosystem, it connects resource assessments produced by Proxy Xray and related analysis services to a public intelligence index whose records can be checked against commitments anchored to Solana. The protocol addresses a recurring limitation of security intelligence: findings may be distributed widely while the observations supporting them remain difficult to inspect or authenticate.
+
+
+PoC represents each published assessment as a canonical record with a deterministic resource identity and a commitment to supporting evidence. Records are assembled into an append-only Merkle transparency structure. A compact checkpoint is anchored on Solana so that a verifier can reconstruct the commitment for a particular assessment without requiring every scan artifact to reside on-chain. The public database makes the assessments searchable, while the cryptographic proof separates record integrity from trust in the database operator.
+
+
+The design explicitly distinguishes a verifiable publication from a true security conclusion. A valid inclusion proof demonstrates that a particular record was committed, not that the original scanner was correct. Consequently, the architecture retains provenance, assessment policy, historical revisions, and evidence availability as distinct properties. It also separates the time an observation was claimed to occur from the time its commitment was finalized on-chain.
+
+
+This paper formalizes the record model, canonical encoding, resource identity, evidence storage, transparency-log construction, signature policies, Solana anchoring, database layout, query interfaces, and the relationship of PoC to Proximus products. It derives proof sizes and operating costs under stated assumptions and identifies the security conditions required for independently verifiable public intelligence.
+
+
+## Definitions and abbreviations
+
+- **Proof of Cipher (PoC)** - A protocol for publishing security assessments with cryptographically verifiable provenance and integrity.
+- **Proof of Cipher Record (PoCR)** - The canonical assessment object committed to the transparency log.
+- **Proof of History (PoH)** - Solana's verifiable sequencing mechanism. It does not prove when an external observation took place.
+- **Proof of Stake (PoS)** - The stake-based consensus component of Solana.
+- **Program Derived Address (PDA)** - A deterministic Solana program-controlled address derived from bounded seeds and a program identifier.
+- **Resource Identifier (RID)** - A versioned digest of a canonical resource identity and namespace.
+- **Merkle root** - A digest committing to an ordered collection of leaves in a Merkle tree.
+- **Inclusion proof** - The authentication path and metadata required to establish membership of a leaf in a committed tree.
+- **Consistency proof** - Evidence that a newer append-only tree extends an earlier tree without rewriting its prefix.
+- **Attestor** - A signer making a precisely scoped statement about evidence, assessment, or publication.
+- **SHA-256** - A 256-bit cryptographic hash function.
+- **Ed25519** - A digital-signature scheme producing 64-byte signatures.
+- **Global Security Graph (GSG)** - A temporal graph of observed security-relevant relationships among resources.
+- **API / SDK** - Application programming interface / software development kit.
+- **Canonical encoding** - A fully specified serialization yielding identical bytes for identical protocol objects.
+- **Evidence manifest** - A committed description of artifacts and the rules governing their retrieval.
+- **Finality** - The blockchain commitment level at which the protocol accepts an anchor as finalized.
+- **PROXP** - The stated Proximus contribution-reward unit. Its accounting is separate from assessment validity.
+
+
+## Introduction
+
+The security of an internet resource depends on systems beyond its immediate operator. External scripts execute inside otherwise legitimate websites, software depends on transitive packages, and applications interact with services whose behavior can change after deployment. Security engines observe portions of these interactions, yet their conclusions frequently remain confined to the service that produced them. An external consumer may receive a malicious classification without a durable means of establishing what was observed or whether the underlying record has changed.
+
+
+PoC connects observations to persistent cryptographic records. Proxy Xray and other Proximus analysis components produce assessments that are assigned stable resource identities and evidence commitments. Their canonical encodings are incorporated into Merkle commitments and anchored to Solana. The public index supports discovery. Independent verification reconstructs the commitment without assuming the index itself is trustworthy.
+
+
+The objective is not to assign permanent truth to a domain or contract. Assessments have scope and age, and a later scan may contradict an earlier result. Preserving both findings allows consumers to distinguish current judgments from historical observations. The same mechanism supports an evidence-linked Global Security Graph while avoiding the unsupported inference that shared infrastructure alone establishes malicious intent.
+
+
+## Protocol architecture and operation
+
+The operational pipeline begins when an authorized scanner produces an observation. A policy engine evaluates the observation and emits an assessment, whose evidence manifest is stored off-chain. The assessment is canonically encoded and appended to a transparency log. The log generates Merkle checkpoints that are signed under an explicit policy and anchored on Solana. Once finalized, the corresponding proof bundle is retrievable through the public index.
+
+
+A consumer queries the public API for the resource history, obtains the canonical record and inclusion proof, reconstructs the checkpoint root, validates authorized signatures and verifies the finalized on-chain anchor. Each verification stage returns its own result. This distinction matters because an inclusion proof can be valid while an evidence artifact is unavailable or an assessment is stale.
+
+
+The security decision path remains independent of the anchoring path. A pre-action risk response cannot wait for blockchain finality. Instead, it may reference an already finalized assessment or produce a new provisional observation that is committed asynchronously. The database therefore exposes publication states such as pending, committed and finalized rather than treating every API response as an already anchored proof.
+
+
+## Mathematical and cryptographic model
+
+### Record tuple and field widths
+
+A compact PoCR core is defined by the tuple
+
+
+**Canonical record tuple**
+
+$$
+\boxed{\mathrm{PoCR}=(v,R,E,D,C,t,H_e,P,N)}
+$$
+
+The proposed record binds schema version, resource, event, classification, confidence, observation time, evidence, provenance and nonce.
+
+
+where $v$ is the schema version, $R$ the resource identifier, $E$ the event type, $D$ the classification, $C$ the confidence representation, $t$ the claimed observation time, $H_e$ the evidence-manifest commitment, $P$ the policy/provenance commitment and $N$ a nonce. The following layout is a **proposed v2 fixed core**, not a claim about the current production serialization.
+
+
+**Proposed v2 fixed core**
+
+| Symbol | Representation | Bytes |
+| --- | --- | --- |
+| $v$ | unsigned 8-bit | 1 |
+| $R$ | SHA-256 digest | 32 |
+| $E$ | unsigned 8-bit | 1 |
+| $D$ | unsigned 8-bit | 1 |
+| $C$ | unsigned 16-bit, basis points | 2 |
+| $t$ | unsigned 64-bit Unix milliseconds | 8 |
+| $H_e$ | SHA-256 digest | 32 |
+| $P$ | SHA-256 digest | 32 |
+| $N$ | 128-bit nonce | 16 |
+| Total | fixed core, excluding envelope | 125 |
+
+
+**Fixed core size**
+
+$$
+S_{\mathrm{core}}=1+32+1+1+2+8+32+32+16=125\ \mathrm{bytes}.
+$$
+
+The proposed fixed fields total 125 bytes. Signatures, envelopes and proofs are separate.
+
+
+The byte order, domain identifiers, enum values, nonce policy and treatment of absent fields must be frozen in a normative schema. A byte count does not establish interoperability without these rules. The canonical record bytes are
+
+
+**Canonical record bytes**
+
+$$
+B_i=\operatorname{Encode}_v(\mathrm{PoCR}_i).
+$$
+
+The versioned encoder must produce exactly the same bytes for identical protocol objects.
+
+
+### Hash commitments
+
+With explicit domain separation, the Merkle leaf and internal node are
+
+
+**Merkle domain separation**
+
+$$
+\begin{aligned}L_i&=\operatorname{SHA256}(\mathtt{0x00}\parallel B_i),\\N_{a,b}&=\operatorname{SHA256}(\mathtt{0x01}\parallel a\parallel b).\end{aligned}
+$$
+
+A leaf begins with 0x00 and an internal node begins with 0x01. The prefixes distinguish records from pairs of child hashes.
+
+
+The tree uses the ordered, unbalanced construction of RFC 9162 rather than silently duplicating the last leaf. A leaf's position and the committed tree size are part of the verification context. For $n=2^k$ leaves, the authentication path has $k$ sibling hashes:
+
+
+**Authentication path size**
+
+$$
+S_{\mathrm{path}}=32\log_2 n\ \mathrm{bytes}.
+$$
+
+For a power-of-two tree, each level contributes one 32-byte sibling hash. This measures the path alone.
+
+
+At $n=4096$, the path is $12\times32=384$ bytes. This excludes the record, tree size, leaf index, signatures, checkpoint and blockchain reference. For non-power-of-two trees, proof lengths depend on the leaf position and the specified tree algorithm.
+
+
+### Verification statement
+
+A verifier accepts inclusion only if the canonical leaf and ordered authentication path reconstruct the authenticated checkpoint root:
+
+
+**Inclusion verification**
+
+$$
+\operatorname{Verify}_{\mathrm{incl}}(B_i,\pi_i,i,n,r)=1.
+$$
+
+The record bytes, proof, leaf index and tree size must reconstruct the authenticated root. Inclusion does not prove the assessment is correct.
+
+
+Under the collision-resistance assumptions of SHA-256, this establishes membership of the encoded record in the committed collection. It does not establish the factual accuracy of a scanner's finding.
+
+
+## Resource identity and canonicalization
+
+A resource must be identified within an explicit namespace. The identity function takes a canonical type and value and commits to their unambiguous encoding:
+
+
+**Scoped resource identity**
+
+$$
+R=\operatorname{SHA256}(\mathtt{PoC-RID-v2}\parallel\operatorname{Encode}(type,scope,canonical(value))).
+$$
+
+The digest binds a versioned domain separator to the encoded resource type, scope and canonical value.
+
+
+The encoding must be length-delimited or otherwise prefix-free. Resource scopes prevent a Solana address from being confused with an EVM contract or an identically spelled hostname. Solana resources include the cluster or genesis identity, EVM resources include the chain identifier. Package artifacts should use immutable digests when available rather than relying on a mutable tag.
+
+
+URL canonicalization is deliberately conservative. Lowercasing a hostname may be appropriate, but changing the path, decoding reserved characters or sorting query parameters can alter application semantics. A resource-level assessment is not automatically transferable to its parent domain. The canonicalization profile is versioned so that future changes cannot silently reinterpret historical hashes.
+
+
+A public SHA-256 identifier does not conceal a guessable hostname. Restricted resources require scoped or keyed identifiers and separate disclosure policies. This is particularly important for enterprise infrastructure and unreleased security findings.
+
+
+## Evidence manifests and storage integrity
+
+An evidence manifest is a canonical description of the artifacts supporting an assessment. Each artifact is identified by a digest over its exact bytes:
+
+
+**Evidence commitments**
+
+$$
+h_j=\operatorname{SHA256}(F_j),\qquad H_e=\operatorname{SHA256}(\operatorname{Encode}(M(h_1,\ldots,h_m))).
+$$
+
+Each artifact is hashed over its exact bytes. The manifest commits to the collection of artifact hashes and retrieval metadata.
+
+
+The manifest includes the declared media type, byte length, collection context, availability policy and any redaction transform. Evidence is stored off-chain in content-addressed or immutable object storage. Its location can change without changing the commitment, provided the bytes remain identical.
+
+
+A public commitment and a publicly accessible artifact are not the same property. Sensitive exploit details or private infrastructure traces may be retained under access control while only their commitments are published. The index must report when an artifact is restricted, unavailable or expired rather than imply that a matching hash guarantees retrievability. Public disclosure requires a separate policy decision before any canonical resource identifier or artifact becomes searchable.
+
+
+For $N$ artifacts of average size $s$, the raw storage lower bound is $Ns$. At $N=10^7$ and $s=20\,\mathrm{KiB}$, this is $204.8$ decimal GB per day before deduplication, indexes, replicas or backups. Evidence economics therefore dominate the size of the 32-byte on-chain roots in high-volume deployments.
+
+
+## Assessment semantics and confidence
+
+Classification is separated from enforcement. The assessment label may be $D\in\{\mathrm{SAFE},\mathrm{MALICIOUS},\mathrm{UNKNOWN}\}$, while an application action may be $A\in\{\mathrm{ALLOW},\mathrm{WARN},\mathrm{BLOCK}\}$. A block action is not evidence that a resource is malicious. It may result from a local policy or insufficient information. Likewise, the absence of a malicious finding is not proof of safety.
+
+
+If a model produces a calibrated malicious probability $p$, a policy may use two thresholds:
+
+
+**Classification thresholds**
+
+$$
+D(p)=\begin{cases}\mathrm{SAFE},&p\leq\tau_s,\\\mathrm{MALICIOUS},&p\geq\tau_m,\\\mathrm{UNKNOWN},&\tau_s<p<\tau_m.\end{cases}
+$$
+
+A calibrated probability below the safe threshold or above the malicious threshold selects that class. The interval between them remains unknown.
+
+
+The thresholds are policy parameters, not universal constants. The reported confidence should be evaluated against labeled observations through precision, recall and calibration metrics. For binary outcomes $y_i\in\{0,1\}$, the Brier score is
+
+
+**Brier score**
+
+$$
+\mathrm{BS}=\frac{1}{N}\sum_{i=1}^{N}(p_i-y_i)^2.
+$$
+
+The mean squared difference between predicted probabilities and binary outcomes measures probabilistic prediction error.
+
+
+A public record should preserve the model or ruleset version and the scan scope so that a later consumer can understand what a classification did and did not establish.
+
+
+## Transparency log and historical consistency
+
+PoC maintains an ordered append-only log of assessment commitments. A checkpoint consists of a log identity, tree size, root, sequence and attestation-policy reference. The log supplies inclusion proofs for individual records and consistency proofs demonstrating that a later tree extends an earlier tree. The construction follows the transparency-log principles of RFC 9162, while its PoC-specific encoding remains explicitly versioned.
+
+
+An immutable commitment to a batch is insufficient if earlier roots are overwritten without a reliable historical anchor. The protocol therefore preserves authenticated checkpoints and their relationships. Independent monitors compare signed checkpoints and verify consistency. Otherwise a malicious operator could present incompatible views to different clients. Solana anchoring makes finalized checkpoint values externally observable, but monitoring is still needed to detect withholding or inconsistent publication.
+
+
+Let $r_n$ be the root at size $n$ and $r_m$ a later root at $m\ge n$. A consistency verifier evaluates
+
+
+**Historical consistency**
+
+$$
+\operatorname{Verify}_{\mathrm{cons}}(n,m,r_n,r_m,\pi_{n\rightarrow m})=1.
+$$
+
+A consistency proof must show that the later tree extends the earlier tree without rewriting its prefix.
+
+
+The exact proof construction is defined by the selected Merkle tree standard. A current-state database view may change as assessments are superseded. The append-only history must not.
+
+
+## Attestation and signer policy
+
+An attestation is a signature over a precisely defined statement, not a generic claim of truth. Publication witnesses may attest to checkpoint integrity while independent scanners attest to a separate observation. These roles must not be conflated. The signed message includes a domain identifier, protocol version, network identity, program identity, policy version and checkpoint digest:
+
+
+**Attestation message**
+
+$$
+m=\operatorname{SHA256}(\operatorname{Encode}(domain,v,network,program,policy,checkpoint)).
+$$
+
+A signature is bound to the domain, protocol version, network, program, policy and checkpoint through this digest.
+
+
+For an Ed25519 key pair $(sk_j,pk_j)$, the signature is $\sigma_j=\mathrm{Sign}_{sk_j}(m)$. A weighted policy accepts a unique authorized signer set $V$ if
+
+
+**Authorized signer weight**
+
+$$
+\sum_{j\in V}w_j\ge\tau,\qquad\forall j\in V:\mathrm{Verify}_{pk_j}(m,\sigma_j)=1.
+$$
+
+Only unique authorized signers count toward the threshold, and every counted signature must verify against the same message.
+
+
+Key rotation and revocation must be recorded in the applicable policy history. The signer set is deduplicated by public key, and authorization is evaluated against the policy version bound into the checkpoint. Three signatures over the same scanner output do not represent three independent observations unless the signed statements explicitly document independent measurement.
+
+
+## Temporal integrity and Solana finality
+
+The protocol distinguishes the claimed observation time $t_o$, the attestation time $t_a$ and the finalized anchoring time $t_f$. Their expected order is $t_o\le t_a\le t_f$, subject to clock skew and delayed processing. A finalized blockchain anchor demonstrates that the committed bytes existed no later than their inclusion in the finalized chain. It does not independently establish when an off-chain scan was performed.
+
+
+PoH contributes to Solana's verifiable sequencing and must not be described as an external timestamp oracle. A client-provided slot cannot prove the observation time. The proof bundle therefore identifies the finalized transaction and slot separately from scanner-provided timestamps. Pending commitments remain distinguishable from finalized commitments in the public API.
+
+
+A freshness factor may support rescan prioritization:
+
+
+**Observation freshness**
+
+$$
+F(\Delta t)=e^{-\lambda\Delta t},\qquad\lambda=\frac{\ln 2}{T_{1/2}}.
+$$
+
+The exponential factor halves after the selected half-life. It expresses age, not a change from malicious to safe.
+
+
+At a 30-day half-life, $F(30)=0.5$ and $F(60)=0.25$. This decay must not automatically turn a malicious historical finding into a safe finding. Expired observations should instead be treated as stale or inconclusive under the applicable policy.
+
+
+## Solana anchoring and program account design
+
+Solana is the public commitment layer, not the primary evidence database. A compact registry can publish versioned checkpoint roots and their continuity references. One PDA per observed resource is not required for global batch anchoring. Per-resource state may be retained only where a distinct application needs it. This removes the inconsistency in the 2025 paper, which combined resource-level accounts with a batch-level amortization formula.
+
+
+A proposed immutable checkpoint payload is 124 bytes: discriminator (8), version (2), sequence (8), tree size (8), root (32), previous checkpoint digest (32), policy digest (32), and flags (2). This is an illustrative schema. Actual deployed account layouts must be derived from the program IDL and verified on-chain. PDA seeds must obey Solana's 32-byte per-seed limit. For example, the seed tuple may be $(\mathtt{poc-checkpoint},\mathrm{LE64}(sequence))$ rather than an invalid concatenated seed exceeding the limit.
+
+
+Signature verification must follow Solana's supported Ed25519 precompile and instruction-introspection rules rather than assuming that a program can invoke a general Ed25519 verification syscall through CPI. A secure implementation checks the verified message bytes, signer keys, policy and instruction references. Checkpoint publication must also prevent replay, unauthorized publishers and conflicting sequence numbers.
+
+
+## Public database and reproducible indexing
+
+The public database is an index over cryptographically committed records. A relational source of truth can maintain resources, observations, assessments, evidence manifests, checkpoints, attestations and graph edges. Search indexes and materialized current-state views accelerate queries but remain derivable from the canonical log. The database must not become the only authority for proof integrity.
+
+
+A minimal relational decomposition is
+
+
+**Relational decomposition**
+
+$$
+\begin{aligned}\mathrm{Resource}&(rid,type,canonical,version),\\\mathrm{Assessment}&(id,rid,classification,policy,evidence,observed),\\\mathrm{Checkpoint}&(seq,size,root,anchor,finality),\\\mathrm{Inclusion}&(assessment\_id,log\_index,checkpoint\_seq),\\\mathrm{Artifact}&(hash,length,visibility,availability),\\\mathrm{Edge}&(src,dst,type,observed,provenance).\end{aligned}
+$$
+
+These relations separate resource identity, assessments, checkpoints, inclusion positions, artifacts and evidence-linked graph edges.
+
+
+Primary keys on immutable hashes and unique log indexes prevent accidental duplicate commitment positions. Time-partitioned assessment tables can reduce maintenance costs, while a separate current-state projection avoids repeatedly scanning a complete history. The current-state projection must identify its derivation checkpoint and indexing lag so clients can distinguish freshness from finality.
+
+
+For public access, searchable fields may include domains, URLs, contract addresses, package identifiers, assessment types, evidence hashes and historical time ranges. Sensitive tenant resources must not be inserted into the public index merely because a hash was produced. Publication requires a distinct disclosure decision and, where necessary, keyed or scoped identifiers.
+
+
+## Private evidence plane and access boundaries
+
+Enterprise scans can expose internal topology and unpublished vulnerabilities. The private plane therefore maintains tenant-scoped authorization and restricted artifacts separately from the public discovery index. A private assessment may still receive a commitment without disclosing its canonical resource name or evidence contents. Public and private evidence use compatible verification semantics but different retrieval policies.
+
+
+Access control is enforced at the service and storage boundaries. Short-lived retrieval credentials and audit records govern restricted artifacts. Redaction is treated as a transform producing a new artifact with a new digest, not as an invisible modification of the original bytes. A public sanitized artifact may be linked to a restricted original through a manifest without exposing the restricted content.
+
+
+## Ingestion, durability and publication state
+
+The event pipeline must tolerate duplicate delivery, out-of-order completion and external outages. A scanner emits an observation to durable ingestion, where the service validates its schema and computes canonical commitments. The publication service appends accepted assessments to the transparency log and periodically anchors checkpoints. Transactional outbox patterns or equivalent mechanisms prevent a database commit from silently losing its publication event.
+
+
+A delivery idempotency key can be constructed as
+
+
+**Delivery idempotency**
+
+$$
+K=\operatorname{SHA256}(\operatorname{Encode}(scanner\_id,job\_id,observation\_seq)).
+$$
+
+Scanner, job and observation sequence identify one delivery. Retries can be deduplicated without merging independent rescans.
+
+
+This identifies retries of the same observation without collapsing independent rescans of the same resource. During Solana congestion, security decisions continue off-chain and checkpoints remain pending. A later anchor references the same immutable checkpoint bytes. The API reports whether a record is observed, committed, submitted or finalized, and it does not describe pending work as already blockchain-verified.
+
+
+## Global Security Graph
+
+The GSG is a temporal heterogeneous graph $G_t=(V,E_t)$ whose nodes represent resources and evidence-linked entities. An edge records the observed relationship, its source and its validity interval. The graph distinguishes direct evidence of malicious behavior from weak associations such as shared hosting. A shared CDN or IP address is not sufficient to classify every co-hosted site as malicious.
+
+
+For an edge $e_{ij}$, a generic confidence weighting can be represented as
+
+
+**Graph relationship weight**
+
+$$
+w_{ij}=q_{ij}\,r_{ij}\,f_{ij}(\Delta t),
+$$
+
+Evidence quality, source reliability and temporal relevance contribute to an edge weight. These parameters require empirical validation.
+
+
+where $q$ represents evidentiary quality, $r$ source reliability and $f$ temporal relevance. These factors are model parameters to be validated empirically, not cryptographic guarantees. Graph propagation may help prioritize investigation but should not replace direct evidence for high-impact public classifications.
+
+
+A graph engine may be useful for complex traversals, but PostgreSQL edge tables and analytical indexes can be sufficient for initial workloads. The storage engine should be selected on measured query complexity rather than assumed from the graph abstraction.
+
+
+## Public APIs and independent verification
+
+The public API provides discovery. The verification SDK supplies the independent trust boundary. Representative interfaces include resource history, assessment retrieval, evidence manifests, checkpoint retrieval, inclusion proofs, consistency proofs and event streaming. An API response should expose assessment status and proof status separately.
+
+
+An independent verifier performs the following logical checks: canonical encoding, leaf reconstruction, Merkle inclusion, checkpoint authentication, signer policy, finalized Solana anchor, checkpoint consistency and evidence digest matching where artifacts are available. The result is a structured verification report rather than a single Boolean. A valid Merkle proof with missing evidence should report valid inclusion and unavailable evidence, not an unqualified verified security conclusion.
+
+
+Third-party applications may use these interfaces to build browser warnings, wallet risk checks, CI/CD gates, SIEM enrichments, vulnerability research portals and autonomous-agent policy controls. Retrieved evidence is untrusted content and must not be interpreted as instructions to an agent or privileged execution environment.
+
+
+## Proximus product supply chain
+
+Proxy Xray produces observations about websites, infrastructure and applications. The Proximus analysis engines turn those observations into assessments under versioned detection policies. The PoC publication service commits eligible assessments to the transparency log and exposes their proofs through the public intelligence interface. The Proxy Dashboard supports scan review, evidence access, disclosure decisions and remediation history. The security API can consume current intelligence for low-latency application decisions.
+
+
+Blockchain RPC providers supply external chain observations and anchoring transport, but an RPC response is not itself a PoC proof. Scanner provenance should identify chain context and relevant data sources when necessary to reproduce a finding. A consumer of the public API may use PoC records without adopting the Proximus scanning product, while the cryptographic verifier remains capable of rejecting inconsistent index responses.
+
+
+PROXP contribution accounting is conceptually downstream of evidence validation. A contribution reward must not determine the SAFE or MALICIOUS classification. The protocol can commit contribution attestations separately from security assessments so that incentive disputes do not alter the historical security record.
+
+
+## Storage, bandwidth and fee calculations
+
+For $N$ assessments in batches of capacity $B$, the ideal number of anchoring transactions is
+
+
+**Ideal batch count**
+
+$$
+T=\left\lceil\frac{N}{B}\right\rceil.
+$$
+
+Divide the assessment count by batch capacity and round upward to include a partially filled batch.
+
+
+At $N=10^7$ per day and $B=4096$, $T=2442$ transactions per day. At a hypothetical base fee of 5000 lamports for one charged signature and no priority fee, the transaction-fee-only component is
+
+
+**Illustrative base transaction fees**
+
+$$
+\begin{aligned}C_{\mathrm{base}}&=2442\times5000=12{,}210{,}000\ \mathrm{lamports},\\&=0.01221\ \mathrm{SOL/day}.\end{aligned}
+$$
+
+This example multiplies 2,442 transactions by 5,000 lamports. It excludes priority fees, extra signatures, retries and account funding.
+
+
+This is **not** a measured production fee: additional signatures, precompile charges, priority fees, retries and account creation must be included. Solana rent-exempt balance is a locked account funding requirement rather than a recurring annual fee, so the 2025 paper's rent-per-year comparison must not be reused as an operating-cost estimate.
+
+
+For a serialized record average of $s=512$ bytes, $10^7$ records/day produce $5.12$ decimal GB/day, or $1.8688$ TB/year before indexes and replicas. If the average evidence artifact is 20 KiB and every record has one unique artifact, the raw evidence workload reaches $204.8$ GB/day. The complete per-assessment cost is
+
+
+**Complete assessment cost**
+
+$$
+C_a=C_{scan}+C_{inference}+C_{evidence}+C_{index}+C_{proof}+C_{network}+C_{ops}.
+$$
+
+Total cost includes scanning, inference, evidence, indexing, proofs, networking and operations.
+
+
+Batch size trades publication latency against fee amortization. For a stable arrival rate $\lambda$, the time to fill a batch is approximately $B/\lambda$. At $\lambda=10^7/86400\approx115.74$ assessments/s, a 4096-event batch fills in about 35.4 seconds. Actual publication delay additionally includes queueing, validation and Solana finality.
+
+
+## Worked cryptographic example
+
+Consider a fictional scan of `https://example.invalid/login`. The resource type is URL and its canonical value is encoded under the versioned URL profile. Its RID is $R=\operatorname{SHA256}(\operatorname{Encode}(\mathtt{url},canonical\_url))$. The scanner stores an evidence artifact $F$ and computes $h=\operatorname{SHA256}(F)$. The evidence manifest is encoded and committed as $H_e=\operatorname{SHA256}(\operatorname{Encode}(M))$. A canonical PoCR includes the classification, observation time and policy digest. Its leaf is $L=\operatorname{SHA256}(\mathtt{0x00}\parallel\operatorname{Encode}(\mathrm{PoCR}))$.
+
+
+Suppose the record is one of 1024 leaves. A complete balanced binary tree yields a ten-sibling path occupying $10\times32=320$ bytes. The verifier receives the canonical record, index, tree size, path and authenticated checkpoint. It hashes the record and combines the siblings in the specified order to reconstruct the root. The reconstructed root must equal the finalized checkpoint root. If a later rescan produces a different classification, it is appended as a new record and the previous assessment remains verifiable.
+
+
+This example intentionally omits fabricated hexadecimal test vectors. Publication-grade vectors require a frozen canonical encoder, complete input bytes, computed digest outputs and an independent implementation that reproduces them. Placeholder digests must never be represented as verified calculations.
+
+
+## Security properties and limitations
+
+PoC provides conditional integrity and provenance guarantees under the collision resistance of SHA-256, the security of Ed25519, correct canonical encoding and the integrity of the checkpoint verification policy. It does not provide a cryptographic proof that an off-chain classification is true. A compromised scanner can produce false but internally consistent evidence. Independent validation and accountable provenance are therefore necessary.
+
+
+A malicious log operator may attempt equivocation or withholding. Signed checkpoints, consistency proofs, independent monitors and Solana anchoring mitigate this threat, but no one mechanism substitutes for the others. Public hashes can also reveal low-entropy identifiers through guessing. Privacy depends on disclosure policy and scoped commitments, not merely on omitting plaintext from Solana.
+
+
+The protocol must preserve auditability across key rotation, unavailable evidence and corrected assessments. Historical findings remain intact while current-state projections change. These distinctions are central to making a public security database useful without treating its classifications as permanent truth.
+
+
+## Conclusion
+
+Proof of Cipher links the production of security observations to an independently verifiable public record. Its architecture gives each assessment a stable identity and evidence commitment, preserves append-only history through Merkle transparency, and uses Solana as an external anchoring layer. The public database enables practical discovery without replacing cryptographic verification, while the private evidence plane prevents indiscriminate disclosure of sensitive customer data.
+
+
+The principal contribution is the separation of three questions that security systems often collapse: what a scanner concluded, what evidence supports that conclusion, and whether the recorded statement has remained intact. Treating these as separate properties permits Proximus intelligence to be reused by external applications without making the original database the sole source of trust. The technical strength of PoC ultimately rests on reproducible encoding, accountable attestation, durable evidence and independent verification rather than on the existence of a blockchain transaction alone.
+
+
+## Technical references
+
+1. PROXIMUS Research Labs Foundation, **Proof of Cipher: Mapping the Invisible Internet Layer**, original research whitepaper, 15 October 2025 (original manuscript).
+2. IETF RFC 9162, **Certificate Transparency Version 2.0**. [https://www.rfc-editor.org/rfc/rfc9162](https://www.rfc-editor.org/rfc/rfc9162)
+3. IETF RFC 8949, **Concise Binary Object Representation (CBOR)**. [https://www.rfc-editor.org/rfc/rfc8949](https://www.rfc-editor.org/rfc/rfc8949)
+4. IETF RFC 8785, **JSON Canonicalization Scheme**. [https://www.rfc-editor.org/rfc/rfc8785](https://www.rfc-editor.org/rfc/rfc8785)
+5. Solana Documentation, **Program Derived Addresses**. [https://solana.com/docs/core/pda](https://solana.com/docs/core/pda)
+6. Solana Documentation, **Precompiled Programs**. [https://solana.com/docs/core/programs/precompiles](https://solana.com/docs/core/programs/precompiles)
+7. Solana Documentation, **Transaction Fees**. [https://solana.com/docs/core/fees](https://solana.com/docs/core/fees)
+
+
+## Publication details
+
+Publisher: PROXIMUS Research Labs Foundation. Protocol: Proximus.
+
+
+The original v1.0 edition was published on 15 October 2025 by Proximus Labs PTE LTD, with Julian Kors listed as auditor. The current edition is published by PROXIMUS Research Labs Foundation.
+
+
+## License
+
+PROXIMUS Research Labs Foundation License (CRL-1.0)
+
+
+This document (the “Work”) may be read, cited, and shared for non-commercial, academic, or review purposes, provided it remains unaltered and properly attributed to PROXIMUS Research Labs Foundation.
+
+
+You may not modify, republish, or use the Work or its contents, including text, diagrams, or algorithms, for commercial, derivative, or competing purposes without prior written consent from PROXIMUS Research Labs Foundation, except for the limited contribution permission below.
+
+
+The Work is provided “as is,” without warranty of any kind.
+
+
+For licensing inquiries or permissions, contact hello@proximus.sh.
+
+
+You may fork the official repository and prepare modified copies solely to propose corrections or contributions through its pull-request process. Identify these copies as unofficial proposals and retain this license and attribution. This permission does not authorize commercial use, competing publications, or distribution of modified editions outside that review process. Only maintainers may accept changes into an official edition.
+
+
+Copyright © 2025-2026 PROXIMUS Research Labs Foundation. All rights reserved.
+
+
+## Legal disclaimer
+
+This document is a technical draft shared strictly for review and feedback. It is not and must not be construed as an offer to sell, or a solicitation to buy, any token, security, or other financial instrument. All forward-looking statements, including functionality, timelines, audits, token unlocks, or governance plans, reflect PROXIMUS Research Labs Foundation’s current intentions as of the publication date and are subject to change based on technological, market, regulatory, and operational factors beyond our control. Readers remain wholly responsible for their own due diligence, professional advice, and compliance with any laws or restrictions that may apply in their jurisdictions.
+
+
+All architectural descriptions, cryptographic choices, performance targets, and prototype references are provided “as is,” without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, or non-infringement. PROXIMUS Research Labs Foundation and its contributors shall not be liable for any direct or consequential loss arising from the use or interpretation of this material.
+
+
+Redistribution of unaltered copies for non-commercial review is permitted provided this notice and the license remain intact.
+
+
+Copyright © 2025-2026 PROXIMUS Research Labs Foundation. All rights reserved.
+
+
+## Contributions
+
+Corrections, research discussion, and proposed changes are welcome through GitHub issues and pull requests. Maintainers review and merge accepted changes. Public access does not change the license restrictions.
+
+
+[Read the source and contribution guide on GitHub](https://github.com/PROXIMUS-RESEARCH-LABS-FOUNDATION/proof-of-cipher-paper)
+
+
+[Licensing inquiries: hello@proximus.sh](mailto:hello@proximus.sh)
